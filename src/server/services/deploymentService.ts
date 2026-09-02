@@ -106,10 +106,11 @@ export class DeploymentService {
       port
     });
     const sandboxId = process.env.E2B_SANDBOX_ID;
-    record.url = sandboxId ? `https://${port}-${sandboxId}.e2b.app` : `http://localhost:${port}`;
+    record.url = `/run/${projectId}/`;
     record.status = previewProcess.status === 'failed' ? 'failed' : 'ready';
     record.logs.push(...previewProcess.logs.slice(-20));
-    record.logs.push(`Arena share URL: ${record.url}`);
+    record.logs.push(`Same-origin Forge preview path: ${record.url}`);
+    record.logs.push(`Internal sandbox port: ${port}${sandboxId ? ` (${port}-${sandboxId}.e2b.app requires Arena traffic token outside the preview UI)` : ''}`);
     record.updatedAt = nowIso();
     projectService.updateProject(projectId, { preview: { processId: previewProcess.id, port, command: previewProcess.command, startedAt: previewProcess.startedAt }, status: record.status === 'ready' ? 'deployed' : 'needs-testing' });
     this.save(record);

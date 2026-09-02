@@ -119,6 +119,56 @@ app.post(
 );
 app.post('/api/processes/:processId/stop', (req, res) => send(res, stopProcess(req.params.processId)));
 
+async function proxyProjectPreview(req: express.Request, res: express.Response) {
+  const project = projectService.getProject(req.params.projectId);
+  const port = project.preview?.port;
+  if (!port) {
+    res.status(409).send(`<!doctype html><title>Preview not running</title><body style="font-family:system-ui;background:#050816;color:#fff;padding:32px"><h1>Preview is not running</h1><p>Start Live Preview or Publish Arena URL inside Forge first.</p></body>`);
+    return;
+  }
+
+  const rest = (req.params[0] || '').replace(/^\//, '');
+  const targetUrl = new URL(`http://localhost:${port}/${rest}`);
+  const query = req.originalUrl.split('?')[1];
+  if (query) targetUrl.search = query;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (!value) continue;
+    const lower = key.toLowerCase();
+    if (['host', 'connection', 'content-length', 'accept-encoding'].includes(lower)) continue;
+    headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+  }
+
+  const body = ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body ?? {});
+  const response = await fetch(targetUrl, { method: req.method, headers, body, redirect: 'manual' });
+  const contentType = response.headers.get('content-type') || '';
+  const setCookie = response.headers.get('set-cookie');
+  if (setCookie) res.setHeader('set-cookie', setCookie);
+  for (const [key, value] of response.headers.entries()) {
+    if (['content-encoding', 'content-length', 'set-cookie', 'transfer-encoding'].includes(key.toLowerCase())) continue;
+    res.setHeader(key, value);
+  }
+  res.status(response.status);
+
+  const prefix = `/run/${project.id}`;
+  if (/text\/html|javascript|ecmascript|text\/css|application\/json/.test(contentType)) {
+    let text = await response.text();
+    text = text
+      .replace(/\b(src|href)=(['"])\/(?!\/)/g, `$1=$2${prefix}/`)
+      .replace(/(['"`])\/(api|health|@vite|src|assets)([^'"`]*)\1/g, (_match, quote: string, first: string, tail: string) => `${quote}${prefix}/${first}${tail}${quote}`)
+      .replace(/(new WebSocket\(['"`])\/(?!\/)/g, `$1${prefix}/`);
+    res.send(text);
+    return;
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  res.send(buffer);
+}
+
+app.all('/run/:projectId', asyncRoute(proxyProjectPreview));
+app.all('/run/:projectId/*', asyncRoute(proxyProjectPreview));
+
 app.post(
   '/api/projects/:projectId/qa',
   asyncRoute(async (req, res) => {

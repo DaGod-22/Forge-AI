@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { forgeApi, previewUrl } from './api';
+import { forgeApi } from './api';
 import type { ForgeConfig } from './api';
 import type {
   AgentTask,
@@ -278,8 +278,8 @@ function App() {
     const deployed = deployments.find((deployment) => deployment.provider === 'arena' && deployment.url)?.url;
     if (deployed) return deployed;
     const port = preview?.port || activeProject?.preview?.port;
-    return port ? previewUrl(port) : '';
-  }, [deployments, preview?.port, activeProject?.preview?.port]);
+    return port && activeProject ? `/run/${activeProject.id}/` : '';
+  }, [deployments, preview?.port, activeProject?.preview?.port, activeProject?.id]);
 
   return (
     <main className="page">
